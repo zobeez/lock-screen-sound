@@ -2,6 +2,14 @@ import Foundation
 import AVFoundation
 import Observation
 
+/// Metadata for a user-imported custom sound. The audio itself lives as an MP3
+/// in the app's `Documents/CustomSounds` directory, named `fileName`.
+struct CustomSound: Identifiable, Hashable, Codable {
+    let id: UUID
+    var name: String
+    var fileName: String
+}
+
 /// Runs continuously in the background (using the same silent-audio trick as
 /// Riley Testut's Clip) and plays the chosen sound effect whenever the phone
 /// locks / the screen turns off.
@@ -20,11 +28,54 @@ final class LockMonitor {
 
     private(set) var isMonitoring = false
     private(set) var status = "Idle"
-    var selectedSound: SoundEffect = .chime
+    var selectedSound: SoundEffect = .chime {
+        didSet { UserDefaults.standard.set(selectedSound.id, forKey: Self.selectedSoundKey) }
+    }
+
+    /// The user's imported custom sounds.
+    private(set) var customSounds: [CustomSound] = []
 
     @ObservationIgnored private var silentPlayer: AVAudioPlayer?
     @ObservationIgnored private var effectPlayer: AVAudioPlayer?
     @ObservationIgnored private var notifyToken: Int32 = -1
+
+    private static let selectedSoundKey = "selectedSound"
+    private static let customSoundsKey = "customSounds"
+
+    /// Directory in the app's Documents folder where imported MP3s are stored so
+    /// they survive relaunches.
+    static var customSoundsDirectory: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("CustomSounds", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    init() {
+        // Restore any previously imported custom sounds.
+        if let data = UserDefaults.standard.data(forKey: Self.customSoundsKey),
+           let decoded = try? JSONDecoder().decode([CustomSound].self, from: data) {
+            customSounds = decoded
+        }
+        // Restore the last selected sound, unless it was a custom sound that no
+        // longer exists.
+        if let savedID = UserDefaults.standard.string(forKey: Self.selectedSoundKey),
+           let saved = SoundEffect(id: savedID),
+           isAvailable(saved) {
+            selectedSound = saved
+        }
+    }
+
+    private func isAvailable(_ effect: SoundEffect) -> Bool {
+        if case .custom(let id) = effect {
+            return customSounds.contains { $0.id == id }
+        }
+        return true
+    }
+
+    private func fileURL(for sound: CustomSound) -> URL {
+        Self.customSoundsDirectory.appendingPathComponent(sound.fileName)
+    }
 
     // MARK: - Public control
 
@@ -98,10 +149,82 @@ final class LockMonitor {
     }
 
     private func playSelectedSound() {
-        effectPlayer = try? AVAudioPlayer(data: selectedSound.wavData)
+        guard let data = selectedSoundData else { return }
+        effectPlayer = try? AVAudioPlayer(data: data)
         effectPlayer?.volume = 1.0
         effectPlayer?.prepareToPlay()
         effectPlayer?.play()
+    }
+
+    /// Audio data for whatever sound is currently selected.
+    private var selectedSoundData: Data? {
+        if case .custom(let id) = selectedSound {
+            guard let sound = customSounds.first(where: { $0.id == id }) else { return nil }
+            return try? Data(contentsOf: fileURL(for: sound))
+        }
+        return selectedSound.builtInAudioData
+    }
+
+    /// The display name for the currently selected sound.
+    var selectedSoundName: String {
+        if case .custom(let id) = selectedSound {
+            return customSounds.first(where: { $0.id == id })?.name ?? "Custom Sound"
+        }
+        return selectedSound.displayName
+    }
+
+    // MARK: - Custom sounds
+
+    /// Copies a user-selected MP3 into the app's Documents directory, adds it to
+    /// the custom sounds, and selects it.
+    func importCustomSound(from url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let id = UUID()
+            let sound = CustomSound(
+                id: id,
+                name: url.deletingPathExtension().lastPathComponent,
+                fileName: "\(id.uuidString).mp3"
+            )
+            try data.write(to: fileURL(for: sound))
+            customSounds.append(sound)
+            persistCustomSounds()
+            selectedSound = .custom(id)
+        } catch {
+            status = "Couldn't import that file: \(error.localizedDescription)"
+        }
+    }
+
+    /// Renames a custom sound. Ignores empty names.
+    func renameCustomSound(_ sound: CustomSound, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = customSounds.firstIndex(where: { $0.id == sound.id }) else { return }
+        customSounds[index].name = trimmed
+        persistCustomSounds()
+    }
+
+    /// Deletes custom sounds at the given offsets, removing their files. If the
+    /// selected sound is deleted, selection falls back to the default tone.
+    func removeCustomSounds(at offsets: IndexSet) {
+        for index in offsets.sorted(by: >) {
+            let sound = customSounds[index]
+            try? FileManager.default.removeItem(at: fileURL(for: sound))
+            if case .custom(let id) = selectedSound, id == sound.id {
+                selectedSound = .chime
+            }
+            customSounds.remove(at: index)
+        }
+        persistCustomSounds()
+    }
+
+    private func persistCustomSounds() {
+        if let data = try? JSONEncoder().encode(customSounds) {
+            UserDefaults.standard.set(data, forKey: Self.customSoundsKey)
+        }
     }
 
     // MARK: - Private lock notification
@@ -124,7 +247,7 @@ final class LockMonitor {
 
             // state == 0 -> screen on (unlocked); state == 1 -> screen off (locked)
             if state == 1 {
-                self.status = "Locked — playing \(self.selectedSound.rawValue)"
+                self.status = "Locked — playing \(self.selectedSoundName)"
                 self.playSelectedSound()
             } else {
                 self.status = "Unlocked — monitoring"
@@ -144,3 +267,22 @@ final class LockMonitor {
         }
     }
 }
+
+#if DEBUG
+extension LockMonitor {
+    /// A monitor pre-seeded with fake imported sounds, for SwiftUI previews.
+    /// The referenced files don't exist, so playback is a no-op — this is for
+    /// visual layout only.
+    static func previewWithCustomSounds() -> LockMonitor {
+        let monitor = LockMonitor()
+        monitor.customSounds = [
+            CustomSound(id: UUID(), name: "My Ringtone", fileName: "preview-1.mp3"),
+            CustomSound(id: UUID(), name: "Airhorn", fileName: "preview-2.mp3")
+        ]
+        if let first = monitor.customSounds.first {
+            monitor.selectedSound = .custom(first.id)
+        }
+        return monitor
+    }
+}
+#endif
