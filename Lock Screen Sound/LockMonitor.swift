@@ -35,12 +35,17 @@ final class LockMonitor {
     /// The user's imported custom sounds.
     private(set) var customSounds: [CustomSound] = []
 
+    /// Ids of sounds the user has pinned to the top of the list (max 3).
+    private(set) var pinnedSoundIDs: [String] = []
+    static let maxPins = 3
+
     @ObservationIgnored private var silentPlayer: AVAudioPlayer?
     @ObservationIgnored private var effectPlayer: AVAudioPlayer?
     @ObservationIgnored private var notifyToken: Int32 = -1
 
     private static let selectedSoundKey = "selectedSound"
     private static let customSoundsKey = "customSounds"
+    private static let pinnedKey = "pinnedSoundIDs"
 
     /// Directory in the app's Documents folder where imported MP3s are stored so
     /// they survive relaunches.
@@ -64,6 +69,41 @@ final class LockMonitor {
            isAvailable(saved) {
             selectedSound = saved
         }
+        // Restore pinned sounds, dropping any that are no longer available.
+        if let saved = UserDefaults.standard.stringArray(forKey: Self.pinnedKey) {
+            pinnedSoundIDs = saved.filter { id in
+                guard let effect = SoundEffect(id: id) else { return false }
+                return isAvailable(effect)
+            }
+        }
+    }
+
+    /// Pinned sounds, in pin order.
+    var pinnedSounds: [SoundEffect] {
+        pinnedSoundIDs.compactMap { SoundEffect(id: $0) }.filter { isAvailable($0) }
+    }
+
+    func isPinned(_ effect: SoundEffect) -> Bool {
+        pinnedSoundIDs.contains(effect.id)
+    }
+
+    /// Whether another sound can still be pinned (max is ``maxPins``).
+    var canPinMore: Bool { pinnedSoundIDs.count < Self.maxPins }
+
+    /// Pins or unpins a sound. Pinning is capped at ``maxPins``.
+    func togglePin(_ effect: SoundEffect) {
+        if let index = pinnedSoundIDs.firstIndex(of: effect.id) {
+            pinnedSoundIDs.remove(at: index)
+        } else if canPinMore {
+            pinnedSoundIDs.append(effect.id)
+        }
+        UserDefaults.standard.set(pinnedSoundIDs, forKey: Self.pinnedKey)
+    }
+
+    /// Selects a sound and immediately plays it as a sample.
+    func select(_ effect: SoundEffect) {
+        selectedSound = effect
+        previewSelectedSound()
     }
 
     private func isAvailable(_ effect: SoundEffect) -> Bool {
@@ -213,12 +253,15 @@ final class LockMonitor {
         for index in offsets.sorted(by: >) {
             let sound = customSounds[index]
             try? FileManager.default.removeItem(at: fileURL(for: sound))
-            if case .custom(let id) = selectedSound, id == sound.id {
+            let effectID = SoundEffect.custom(sound.id).id
+            if selectedSound.id == effectID {
                 selectedSound = .chime
             }
+            pinnedSoundIDs.removeAll { $0 == effectID }
             customSounds.remove(at: index)
         }
         persistCustomSounds()
+        UserDefaults.standard.set(pinnedSoundIDs, forKey: Self.pinnedKey)
     }
 
     private func persistCustomSounds() {
@@ -279,9 +322,8 @@ extension LockMonitor {
             CustomSound(id: UUID(), name: "My Ringtone", fileName: "preview-1.mp3"),
             CustomSound(id: UUID(), name: "Airhorn", fileName: "preview-2.mp3")
         ]
-        if let first = monitor.customSounds.first {
-            monitor.selectedSound = .custom(first.id)
-        }
+        monitor.pinnedSoundIDs = [SoundEffect.chime.id, SoundEffect.success.id]
+        monitor.selectedSound = .chime
         return monitor
     }
 }

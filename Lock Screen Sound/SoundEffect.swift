@@ -20,6 +20,15 @@ enum SoundEffect: Identifiable, Hashable {
     case twinkle
     case success
 
+    // Bundled meme / novelty effects
+    case carHorn
+    case springJump
+    case explosion
+    case metalPipe
+    case fah
+    case sus
+    case helloThere
+
     // A sound the user imported from their own MP3 file, identified by its id
     case custom(UUID)
 
@@ -27,7 +36,8 @@ enum SoundEffect: Identifiable, Hashable {
     /// is excluded because it only exists once the user imports a file.
     static let builtInCases: [SoundEffect] = [
         .beep, .chime, .coin, .descending, .alarm,
-        .levelUp, .twinkle, .success
+        .levelUp, .twinkle, .success,
+        .carHorn, .springJump, .explosion, .metalPipe, .fah, .sus, .helloThere
     ]
 
     var id: String {
@@ -40,6 +50,13 @@ enum SoundEffect: Identifiable, Hashable {
         case .levelUp: return "levelUp"
         case .twinkle: return "twinkle"
         case .success: return "success"
+        case .carHorn: return "carHorn"
+        case .springJump: return "springJump"
+        case .explosion: return "explosion"
+        case .metalPipe: return "metalPipe"
+        case .fah: return "fah"
+        case .sus: return "sus"
+        case .helloThere: return "helloThere"
         case .custom(let uuid): return "custom-\(uuid.uuidString)"
         }
     }
@@ -66,6 +83,13 @@ enum SoundEffect: Identifiable, Hashable {
         case .levelUp: return "Level Up"
         case .twinkle: return "Twinkle"
         case .success: return "Success"
+        case .carHorn: return "Car Horn"
+        case .springJump: return "Spring Jump"
+        case .explosion: return "Explosion"
+        case .metalPipe: return "Metal Pipe"
+        case .fah: return "Fah"
+        case .sus: return "Sus"
+        case .helloThere: return "Hello There"
         case .custom: return "Custom Sound"
         }
     }
@@ -81,6 +105,13 @@ enum SoundEffect: Identifiable, Hashable {
         case .levelUp: return "A cheerful level-up flourish"
         case .twinkle: return "A twinkling notification chime"
         case .success: return "A bright positive chime"
+        case .carHorn: return "A goofy car honk"
+        case .springJump: return "A comedic spring boing"
+        case .explosion: return "A big boom"
+        case .metalPipe: return "The falling metal pipe clang"
+        case .fah: return "A quick vine-boom 'fah'"
+        case .sus: return "The sus meme sting"
+        case .helloThere: return "A cheerful 'hello there'"
         case .custom: return "Your imported MP3"
         }
     }
@@ -96,6 +127,13 @@ enum SoundEffect: Identifiable, Hashable {
         case .levelUp: return "arrow.up.forward.circle.fill"
         case .twinkle: return "sparkles"
         case .success: return "checkmark.seal.fill"
+        case .carHorn: return "car.fill"
+        case .springJump: return "arrow.up.circle.fill"
+        case .explosion: return "flame.fill"
+        case .metalPipe: return "wrench.and.screwdriver.fill"
+        case .fah: return "waveform"
+        case .sus: return "eye.fill"
+        case .helloThere: return "hand.wave.fill"
         case .custom: return "waveform.circle.fill"
         }
     }
@@ -107,6 +145,13 @@ enum SoundEffect: Identifiable, Hashable {
         case .levelUp: return "LevelUp"
         case .twinkle: return "Twinkle"
         case .success: return "Success"
+        case .carHorn: return "CarHorn"
+        case .springJump: return "SpringJump"
+        case .explosion: return "Explosion"
+        case .metalPipe: return "MetalPipe"
+        case .fah: return "Fah"
+        case .sus: return "Sus"
+        case .helloThere: return "HelloThere"
         default: return nil
         }
     }
