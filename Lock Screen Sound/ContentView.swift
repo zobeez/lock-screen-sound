@@ -37,23 +37,39 @@ struct ContentView: View {
 
                 Spacer()
 
-                VStack(spacing: 18) {
-                    VStack(spacing: 4) {
-                        Text("CURRENT SOUND")
-                            .font(.caption.weight(.semibold))
-                            .tracking(1.5)
-                            .foregroundStyle(.secondary)
-                        Text(monitor.selectedSoundName)
-                            .font(.system(size: 44, weight: .heavy))
-                            .foregroundStyle(.black)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                            .contentTransition(.numericText())
+                VStack(spacing: 22) {
+                    NavigationLink {
+                        AllSoundsView(monitor: monitor)
+                    } label: {
+                        HStack(spacing: 10) {
+                            // Invisible chevron balances the trailing one so the
+                            // text stays centered.
+                            Image(systemName: "chevron.right")
+                                .font(.headline.weight(.semibold))
+                                .opacity(0)
+                            VStack(spacing: 4) {
+                                Text("CURRENT SOUND")
+                                    .font(.caption.weight(.semibold))
+                                    .tracking(1.5)
+                                    .foregroundStyle(.secondary)
+                                Text(monitor.selectedSoundName)
+                                    .font(.system(size: 44, weight: .heavy))
+                                    .foregroundStyle(.black)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
+                                    .contentTransition(.numericText())
+                            }
+                            .frame(maxWidth: .infinity)
+                            Image(systemName: "chevron.right")
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 18)
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity)
+                        .glassEffect(in: .rect(cornerRadius: 22))
                     }
-                    .padding(.vertical, 18)
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity)
-                    .glassEffect(in: .rect(cornerRadius: 22))
+                    .buttonStyle(.plain)
 
                     Button {
                         monitor.previewSelectedSound()
@@ -85,7 +101,7 @@ struct ContentView: View {
                         .foregroundStyle(Color.cardText.opacity(0.85))
                         .multilineTextAlignment(.center)
                 }
-                .padding(28)
+                .padding(34)
                 .frame(maxWidth: .infinity)
                 .background(
                     LinearGradient(
@@ -97,21 +113,10 @@ struct ContentView: View {
                 )
                 .shadow(color: .black.opacity(0.10), radius: 14, y: 5)
 
-                NavigationLink {
-                    AllSoundsView(monitor: monitor)
-                } label: {
-                    Label("More Sounds", systemImage: "ellipsis.circle")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(.brandPurple)
-                .padding(.top, 20)
+                footerNote
+                    .padding(.top, 16)
 
                 Spacer()
-
-                footerNote
             }
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

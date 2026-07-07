@@ -1,0 +1,12 @@
+{
+  "/Users/zoebeisner/Documents/Lock Screen Sound/Lock Screen Sound/ContentView.swift" : {
+    "abi-baseline-json" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock_Screen_Sound.abi.json",
+    "const-values" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock Screen Sound-primary.swiftconstvalues",
+    "dependencies" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock Screen Sound-primary.d",
+    "diagnostics" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock Screen Sound-primary.dia",
+    "objc-header" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock_Screen_Sound-Swift.h",
+    "swiftdoc" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock_Screen_Sound.swiftdoc",
+    "swiftmodule" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock_Screen_Sound.swiftmodule",
+    "swiftsourceinfo" : "/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Intermediates.noindex/Lock Screen Sound.build/Release-iphoneos/Lock Screen Sound.build/Objects-normal/arm64/Lock_Screen_Sound.swiftsourceinfo"
+  }
+}

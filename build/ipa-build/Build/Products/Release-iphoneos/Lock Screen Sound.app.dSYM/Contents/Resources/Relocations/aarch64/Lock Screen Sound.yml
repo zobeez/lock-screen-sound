@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/zoebeisner/Documents/Lock Screen Sound/build/ipa-build/Build/Products/Release-iphoneos/Lock Screen Sound.app/Lock Screen Sound'
+relocations:     []
+...
