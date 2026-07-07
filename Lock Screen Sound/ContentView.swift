@@ -16,80 +16,108 @@ extension Color {
     static let brandGreen = Color(red: 0.30, green: 0.69, blue: 0.31)
     /// Purple accent, used for the "More" entry.
     static let brandPurple = Color(red: 0.52, green: 0.35, blue: 0.85)
+    /// Light yellow fill for the current-sound card.
+    static let softYellow = Color(red: 1.0, green: 0.95, blue: 0.78)
+    /// Dark amber text that reads on the yellow card.
+    static let cardText = Color(red: 0.34, green: 0.25, blue: 0.03)
 }
 
 struct ContentView: View {
     @State private var monitor: LockMonitor
-    @State private var showImporter = false
+    @State private var testBounce = 0
 
     init(monitor: LockMonitor? = nil) {
         _monitor = State(initialValue: monitor ?? LockMonitor())
     }
 
-    /// The home list: pinned first, then default sounds, sized to fill the
-    /// available height so "More" and the footer stay visible without scrolling.
-    private func homeSounds(fitting height: CGFloat) -> [SoundEffect] {
-        let rowHeight: CGFloat = 48
-        // Space taken by the header, footer, "More" + "Import MP3" rows, insets.
-        let reserved: CGFloat = 348
-        let capacity = max(3, Int((height - reserved) / rowHeight))
-        let pinned = monitor.pinnedSounds
-        let unpinned = SoundEffect.builtInCases.filter { !monitor.isPinned($0) }
-        let remaining = max(0, capacity - pinned.count)
-        return pinned + Array(unpinned.prefix(remaining))
-    }
-
     var body: some View {
         NavigationStack {
-            GeometryReader { geo in
-                let sounds = homeSounds(fitting: geo.size.height)
-                VStack(spacing: 0) {
-                    header
-                    List {
-                        Section {
-                            ForEach(sounds) { effect in
-                                SoundRow(monitor: monitor, effect: effect)
-                            }
-                            NavigationLink {
-                                AllSoundsView(monitor: monitor)
-                            } label: {
-                                Label("More", systemImage: "ellipsis.circle")
-                                    .foregroundStyle(Color.brandPurple)
-                                    .fontWeight(.semibold)
-                            }
-                            .listRowBackground(Color(.secondarySystemGroupedBackground))
+            VStack(spacing: 0) {
+                header
 
-                            Button {
-                                showImporter = true
-                            } label: {
-                                Label("Import MP3", systemImage: "square.and.arrow.down")
-                            }
-                            .listRowBackground(Color(.secondarySystemGroupedBackground))
+                Spacer()
+
+                VStack(spacing: 18) {
+                    VStack(spacing: 4) {
+                        Text("CURRENT SOUND")
+                            .font(.caption.weight(.semibold))
+                            .tracking(1.5)
+                            .foregroundStyle(.secondary)
+                        Text(monitor.selectedSoundName)
+                            .font(.system(size: 44, weight: .heavy))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .contentTransition(.numericText())
+                    }
+                    .padding(.vertical, 18)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
+                    .glassEffect(in: .rect(cornerRadius: 22))
+
+                    Button {
+                        monitor.previewSelectedSound()
+                        testBounce += 1
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.brandGreen.gradient)
+                                .frame(width: 104, height: 104)
+                                .shadow(color: Color.brandGreen.opacity(0.4), radius: 14, y: 6)
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 40, weight: .bold))
+                                .foregroundStyle(.white)
+                                .symbolEffect(.bounce, value: testBounce)
                         }
                     }
-                    .listStyle(.insetGrouped)
-                    .scrollContentBackground(.hidden)
-                    // Size the list to its content so the footer can center in
-                    // whatever space is left below it. (+2 for the More and
-                    // Import rows; the constant covers the group insets.)
-                    .frame(height: CGFloat(sounds.count + 2) * 55 + 44)
+                    .buttonStyle(PressableStyle())
 
-                    footerNote
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Text("Test Sound")
+                        .font(.headline)
+                        .foregroundStyle(Color.cardText)
+
+                    Divider()
+                        .overlay(Color.cardText.opacity(0.25))
+                        .padding(.horizontal, 8)
+
+                    Text("This sound will play when you lock your phone!")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.cardText.opacity(0.85))
+                        .multilineTextAlignment(.center)
                 }
+                .padding(28)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(
+                        colors: [Color.softYellow, Color(red: 1.0, green: 0.84, blue: 0.48)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: .rect(cornerRadius: 28)
+                )
+                .shadow(color: .black.opacity(0.10), radius: 14, y: 5)
+
+                NavigationLink {
+                    AllSoundsView(monitor: monitor)
+                } label: {
+                    Label("More Sounds", systemImage: "ellipsis.circle")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(.brandPurple)
+                .padding(.top, 20)
+
+                Spacer()
+
+                footerNote
             }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(BrandBackground())
             .toolbar(.hidden, for: .navigationBar)
             .tint(.brandGreen)
-            .fileImporter(
-                isPresented: $showImporter,
-                allowedContentTypes: [.mp3],
-                allowsMultipleSelection: false
-            ) { result in
-                if case .success(let urls) = result, let url = urls.first {
-                    monitor.importCustomSound(from: url)
-                }
-            }
         }
         .task {
             // Monitoring is always on while the app is open.
@@ -108,17 +136,24 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 8)
-        .padding(.bottom, 8)
     }
 
     private var footerNote: some View {
-        Text("Tap a sound to hear it and set it. Swipe a sound to pin up to \(LockMonitor.maxPins) to the top. Your chosen sound plays automatically when you lock your phone while the app is open.")
+        Text("Keep Lock Screen Sound running in the background, and it'll play your sound each time you lock your phone.")
             .font(.footnote)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
+    }
+}
+
+/// A button style that gives a subtle press-down scale.
+private struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.snappy(duration: 0.2), value: configuration.isPressed)
     }
 }
 
@@ -153,6 +188,17 @@ private struct AllSoundsView: View {
     var body: some View {
         List {
             Section {
+                Button {
+                    showImporter = true
+                } label: {
+                    Label("Import MP3", systemImage: "square.and.arrow.down")
+                }
+                .listRowBackground(Color(.secondarySystemGroupedBackground))
+            } footer: {
+                Text("Import your own MP3s, then swipe them to rename or delete.")
+            }
+
+            Section {
                 ForEach(allSounds) { effect in
                     SoundRow(monitor: monitor, effect: effect)
                         .swipeActions(edge: .trailing) {
@@ -171,17 +217,6 @@ private struct AllSoundsView: View {
                             }
                         }
                 }
-            }
-
-            Section {
-                Button {
-                    showImporter = true
-                } label: {
-                    Label("Import MP3", systemImage: "square.and.arrow.down")
-                }
-                .listRowBackground(Color(.secondarySystemGroupedBackground))
-            } footer: {
-                Text("Import your own MP3s, then swipe them to rename or delete.")
             }
         }
         .listStyle(.insetGrouped)
