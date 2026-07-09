@@ -180,6 +180,7 @@ private struct AllSoundsView: View {
     @State private var showImporter = false
     @State private var renaming: CustomSound?
     @State private var newName = ""
+    @State private var showPinLimit = false
 
     private var allSounds: [SoundEffect] {
         let pinned = monitor.pinnedSounds
@@ -205,7 +206,7 @@ private struct AllSoundsView: View {
 
             Section {
                 ForEach(allSounds) { effect in
-                    SoundRow(monitor: monitor, effect: effect)
+                    SoundRow(monitor: monitor, effect: effect, onPinLimitReached: { showPinLimit = true })
                         .swipeActions(edge: .trailing) {
                             if case .custom = effect {
                                 Button(role: .destructive) {
@@ -250,6 +251,11 @@ private struct AllSoundsView: View {
                 renaming = nil
             }
         }
+        .alert("Pin Limit Reached", isPresented: $showPinLimit) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("You can pin up to \(LockMonitor.maxPins) sounds. Unpin one to make room for another.")
+        }
     }
 
     private func startRename(_ effect: SoundEffect) {
@@ -272,6 +278,7 @@ private struct AllSoundsView: View {
 private struct SoundRow: View {
     let monitor: LockMonitor
     let effect: SoundEffect
+    var onPinLimitReached: () -> Void = {}
 
     private var isSelected: Bool { monitor.selectedSound == effect }
     private var isPinned: Bool { monitor.isPinned(effect) }
@@ -316,10 +323,14 @@ private struct SoundRow: View {
                            : Color(.secondarySystemGroupedBackground))
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button {
-                // Move straight to/from the top with no fade animation.
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { monitor.togglePin(effect) }
+                if !isPinned && !monitor.canPinMore {
+                    onPinLimitReached()
+                } else {
+                    // Move straight to/from the top with no fade animation.
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { monitor.togglePin(effect) }
+                }
             } label: {
                 Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin")
             }
