@@ -25,6 +25,7 @@ extension Color {
 struct ContentView: View {
     @State private var monitor: LockMonitor
     @State private var testBounce = 0
+    @Environment(\.openURL) private var openURL
 
     init(monitor: LockMonitor? = nil) {
         _monitor = State(initialValue: monitor ?? LockMonitor())
@@ -32,12 +33,14 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                header
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        header
 
-                Spacer()
+                        Spacer(minLength: 24)
 
-                VStack(spacing: 22) {
+                        VStack(spacing: 22) {
                     NavigationLink {
                         AllSoundsView(monitor: monitor)
                     } label: {
@@ -51,9 +54,9 @@ struct ContentView: View {
                                 Text("CURRENT SOUND")
                                     .font(.caption.weight(.semibold))
                                     .tracking(1.5)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.cardText.opacity(0.55))
                                 Text(monitor.selectedSoundName)
-                                    .font(.system(size: 44, weight: .heavy))
+                                    .font(.system(size: 58, weight: .heavy))
                                     .foregroundStyle(.black)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.5)
@@ -62,12 +65,16 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity)
                             Image(systemName: "chevron.right")
                                 .font(.headline.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.cardText.opacity(0.55))
                         }
-                        .padding(.vertical, 18)
+                        .padding(.vertical, 20)
                         .padding(.horizontal, 20)
                         .frame(maxWidth: .infinity)
-                        .glassEffect(in: .rect(cornerRadius: 22))
+                        // Liquid Glass, but pinned to the light appearance so it
+                        // keeps the same cream look in dark mode (it sits on the
+                        // fixed light-yellow card).
+                        .glassEffect(in: .rect(cornerRadius: 24))
+                        .environment(\.colorScheme, .light)
                     }
                     .buttonStyle(.plain)
 
@@ -96,12 +103,14 @@ struct ContentView: View {
                         .overlay(Color.cardText.opacity(0.25))
                         .padding(.horizontal, 8)
 
-                    Text("This sound will play when you lock your phone!")
+                    Text("Keep the app running in the background and this sound will play each time you lock your phone.")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.cardText.opacity(0.85))
                         .multilineTextAlignment(.center)
                 }
-                .padding(34)
+                .padding(.horizontal, 34)
+                .padding(.top, 26)
+                .padding(.bottom, 22)
                 .frame(maxWidth: .infinity)
                 .background(
                     LinearGradient(
@@ -113,14 +122,16 @@ struct ContentView: View {
                 )
                 .shadow(color: .black.opacity(0.10), radius: 14, y: 5)
 
-                footerNote
-                    .padding(.top, 16)
+                        aodWarning
+                            .padding(.top, 16)
 
-                Spacer()
+                        Spacer(minLength: 24)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+                }
+                .background(BrandBackground())
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(BrandBackground())
             .toolbar(.hidden, for: .navigationBar)
             .tint(.brandGreen)
         }
@@ -143,13 +154,39 @@ struct ContentView: View {
         .padding(.top, 8)
     }
 
-    private var footerNote: some View {
-        Text("Keep Lock Screen Sound running in the background, and it'll play your sound each time you lock your phone.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 4)
+    /// Warns that Always-On Display interferes with lock detection and offers a
+    /// shortcut into Settings so the user can turn it off.
+    private var aodWarning: some View {
+        VStack(spacing: 8) {
+            Label("Turn off Always-On Display", systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.brandGold)
+
+            Text("Lock sounds won't work correctly while Always-On Display is on. Turn it off in Settings › Display & Brightness.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button("Open Settings") {
+                // Deep-link to Settings › Display & Brightness (where the AOD
+                // toggle lives). openSettingsURLString only opens this app's own
+                // page, which doesn't contain the setting.
+                if let url = URL(string: "App-Prefs:root=DISPLAY") {
+                    openURL(url)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.borderless)
+            .tint(.brandGreen)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(Color.brandGold.opacity(0.12), in: .rect(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.brandGold.opacity(0.35), lineWidth: 1)
+        )
+        .padding(.horizontal, 8)
     }
 }
 
