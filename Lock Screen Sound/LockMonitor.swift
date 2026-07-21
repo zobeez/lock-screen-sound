@@ -20,8 +20,9 @@ struct CustomSound: Identifiable, Hashable, Codable {
 /// effect on top of it when a lock is detected.
 ///
 /// Lock detection uses the private SpringBoard Darwin notification
-/// `com.apple.springboard.hasBlankedScreen`, whose state is `0` when the screen
-/// is on (unlocked) and `1` when it is blanked (locked / turned off).
+/// `com.apple.springboard.lockcomplete`, which posts the moment the device
+/// finishes locking. Repeat posts around a single lock are debounced so the
+/// sound plays exactly once.
 @MainActor
 @Observable
 final class LockMonitor {
@@ -29,7 +30,11 @@ final class LockMonitor {
     private(set) var isMonitoring = false
     private(set) var status = "Idle"
     var selectedSound: SoundEffect = .chime {
-        didSet { UserDefaults.standard.set(selectedSound.id, forKey: Self.selectedSoundKey) }
+        didSet {
+            UserDefaults.standard.set(selectedSound.id, forKey: Self.selectedSoundKey)
+            // Prime the player for the new selection so the next lock plays instantly.
+            preloadSelectedSound()
+        }
     }
 
     /// The user's imported custom sounds.
@@ -41,7 +46,17 @@ final class LockMonitor {
 
     @ObservationIgnored private var silentPlayer: AVAudioPlayer?
     @ObservationIgnored private var effectPlayer: AVAudioPlayer?
+    /// The sound id the current `effectPlayer` was built for, so we only rebuild
+    /// it when the selection actually changes.
+    @ObservationIgnored private var preparedSoundID: String?
+    /// When the effect last played, used to debounce duplicate lock events.
+    @ObservationIgnored private var lastPlayTime: Date = .distantPast
     @ObservationIgnored private var notifyToken: Int32 = -1
+
+    /// Ignore lock events that arrive within this window of the last play. The
+    /// lock notification can post more than once around a single lock, which
+    /// would otherwise play the sound twice.
+    private static let debounceInterval: TimeInterval = 1.5
 
     private static let selectedSoundKey = "selectedSound"
     private static let customSoundsKey = "customSounds"
@@ -130,6 +145,7 @@ final class LockMonitor {
                 // otherwise stall the UI (AVAudioSession "Hang Risk").
                 try await Self.activateSession()
                 startSilentAudio()
+                preloadSelectedSound()
                 registerForLockNotifications()
                 status = "Monitoring — lock your phone to test"
             } catch {
@@ -188,12 +204,26 @@ final class LockMonitor {
         silentPlayer?.play()
     }
 
-    private func playSelectedSound() {
-        guard let data = selectedSoundData else { return }
+    /// Builds and primes the effect player for the current selection so the next
+    /// `play()` is instant. A no-op when the correct sound is already prepared.
+    private func preloadSelectedSound() {
+        guard effectPlayer == nil || preparedSoundID != selectedSound.id else { return }
+        guard let data = selectedSoundData else {
+            effectPlayer = nil
+            preparedSoundID = nil
+            return
+        }
         effectPlayer = try? AVAudioPlayer(data: data)
         effectPlayer?.volume = 1.0
         effectPlayer?.prepareToPlay()
-        effectPlayer?.play()
+        preparedSoundID = selectedSound.id
+    }
+
+    private func playSelectedSound() {
+        preloadSelectedSound()
+        guard let player = effectPlayer else { return }
+        player.currentTime = 0
+        player.play()
     }
 
     /// Audio data for whatever sound is currently selected.
@@ -273,28 +303,26 @@ final class LockMonitor {
     // MARK: - Private lock notification
 
     private func registerForLockNotifications() {
-        // Reconstruct "com.apple.springboard.hasBlankedScreen" at runtime so the
-        // private API name isn't a plain string literal in the binary.
-        let name = ["com", "apple", "springboard", "hasBlank3dScr33n"]
+        // Reconstruct "com.apple.springboard.lockcomplete" at runtime so the
+        // private API name isn't a plain string literal in the binary. This fires
+        // at the moment the device finishes locking — matching where the default
+        // lock sound plays — rather than when the screen later blanks.
+        let name = ["com", "apple", "springboard", "l0ckc0mpl3t3"]
             .joined(separator: ".")
             .replacingOccurrences(of: "3", with: "e")
+            .replacingOccurrences(of: "0", with: "o")
 
-        let registration = notify_register_dispatch(name, &notifyToken, DispatchQueue.main) { [weak self] token in
+        let registration = notify_register_dispatch(name, &notifyToken, DispatchQueue.main) { [weak self] _ in
             guard let self else { return }
 
-            var state: UInt64 = 0
-            let result = notify_get_state(token, &state)
-            if result != 0 {
-                NSLog("Lock screen notify_get_state returned: \(result)")
-            }
+            // The notification can post more than once per lock; ignore repeats
+            // that land within the debounce window so the sound plays only once.
+            let now = Date()
+            guard now.timeIntervalSince(self.lastPlayTime) > Self.debounceInterval else { return }
+            self.lastPlayTime = now
 
-            // state == 0 -> screen on (unlocked); state == 1 -> screen off (locked)
-            if state == 1 {
-                self.status = "Locked — playing \(self.selectedSoundName)"
-                self.playSelectedSound()
-            } else {
-                self.status = "Unlocked — monitoring"
-            }
+            self.status = "Locked — playing \(self.selectedSoundName)"
+            self.playSelectedSound()
         }
 
         if registration != 0 {
