@@ -39,6 +39,10 @@ final class LockMonitor {
     private(set) var pinnedSoundIDs: [String] = []
     static let maxPins = 3
 
+    /// Longest a custom sound name may be. Keeps names within the width the
+    /// home screen's fixed-size current-sound label can show without shrinking.
+    static let maxNameLength = 12
+
     @ObservationIgnored private var silentPlayer: AVAudioPlayer?
     @ObservationIgnored private var effectPlayer: AVAudioPlayer?
     @ObservationIgnored private var notifyToken: Int32 = -1
@@ -215,18 +219,28 @@ final class LockMonitor {
 
     // MARK: - Custom sounds
 
-    /// Copies a user-selected MP3 into the app's Documents directory, adds it to
-    /// the custom sounds, and selects it.
-    func importCustomSound(from url: URL) {
+    /// Clamps a user-supplied name: trims whitespace and caps its length.
+    static func sanitizedName(_ raw: String) -> String {
+        String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxNameLength))
+    }
+
+    /// Copies a user-selected MP3 into the app's Documents directory under the
+    /// given name, adds it to the custom sounds, and selects it. Falls back to
+    /// the file's own name if the provided name is empty.
+    func importCustomSound(from url: URL, name providedName: String) {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         do {
             let data = try Data(contentsOf: url)
             let id = UUID()
+            var name = Self.sanitizedName(providedName)
+            if name.isEmpty {
+                name = Self.sanitizedName(url.deletingPathExtension().lastPathComponent)
+            }
             let sound = CustomSound(
                 id: id,
-                name: url.deletingPathExtension().lastPathComponent,
+                name: name,
                 fileName: "\(id.uuidString).mp3"
             )
             try data.write(to: fileURL(for: sound))
@@ -238,9 +252,9 @@ final class LockMonitor {
         }
     }
 
-    /// Renames a custom sound. Ignores empty names.
+    /// Renames a custom sound. Ignores empty names; caps length.
     func renameCustomSound(_ sound: CustomSound, to newName: String) {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.sanitizedName(newName)
         guard !trimmed.isEmpty,
               let index = customSounds.firstIndex(where: { $0.id == sound.id }) else { return }
         customSounds[index].name = trimmed

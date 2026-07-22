@@ -56,10 +56,14 @@ struct ContentView: View {
                                     .tracking(1.5)
                                     .foregroundStyle(Color.cardText.opacity(0.55))
                                 Text(monitor.selectedSoundName)
-                                    .font(.system(size: 58, weight: .heavy))
+                                    // Fixed size so every name renders the same
+                                    // (the longest built-in names, e.g. "Power
+                                    // Down"/"Spring Jump", fit at this size). The
+                                    // name length cap keeps custom names in range.
+                                    .font(.system(size: 32, weight: .heavy))
                                     .foregroundStyle(.black)
                                     .lineLimit(1)
-                                    .minimumScaleFactor(0.5)
+                                    .minimumScaleFactor(0.7)
                                     .contentTransition(.numericText())
                             }
                             .frame(maxWidth: .infinity)
@@ -214,43 +218,47 @@ private struct BrandBackground: View {
 /// The full catalog: every sound (pinned first) plus importing.
 private struct AllSoundsView: View {
     let monitor: LockMonitor
-    @State private var showImporter = false
+    @State private var showImportPopup = false
     @State private var renaming: CustomSound?
     @State private var newName = ""
     @State private var showPinLimit = false
 
     private var allSounds: [SoundEffect] {
         let pinned = monitor.pinnedSounds
-        let defaults = SoundEffect.builtInCases.filter { !monitor.isPinned($0) }
+        // Custom sounds newest-first, above the built-ins, so a just-added
+        // sound appears at the top of the list right after Add.
         let custom = monitor.customSounds
+            .reversed()
             .map { SoundEffect.custom($0.id) }
             .filter { !monitor.isPinned($0) }
-        return pinned + defaults + custom
+        let defaults = SoundEffect.builtInCases.filter { !monitor.isPinned($0) }
+        return pinned + custom + defaults
     }
 
     var body: some View {
         List {
             Section {
                 Button {
-                    showImporter = true
+                    withAnimation(.easeInOut(duration: 0.2)) { showImportPopup = true }
                 } label: {
                     Label("Import MP3", systemImage: "square.and.arrow.down")
                 }
                 .listRowBackground(Color(.secondarySystemGroupedBackground))
             } footer: {
-                Text("Import your own MP3s, then swipe them to rename or delete.")
+                Text("Import your own MP3s, then swipe or press and hold to rename or delete.")
             }
 
             Section {
                 ForEach(allSounds) { effect in
-                    SoundRow(monitor: monitor, effect: effect, onPinLimitReached: { showPinLimit = true })
-                        .swipeActions(edge: .trailing) {
-                            if case .custom = effect {
+                    if case .custom = effect {
+                        SoundRow(monitor: monitor, effect: effect, onPinLimitReached: { showPinLimit = true })
+                            .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     deleteCustom(effect)
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
+                                .tint(.red)
                                 Button {
                                     startRename(effect)
                                 } label: {
@@ -258,7 +266,21 @@ private struct AllSoundsView: View {
                                 }
                                 .tint(.brandGold)
                             }
-                        }
+                            .contextMenu {
+                                Button {
+                                    startRename(effect)
+                                } label: {
+                                    Text("Rename")
+                                }
+                                Button(role: .destructive) {
+                                    deleteCustom(effect)
+                                } label: {
+                                    Text("Delete")
+                                }
+                            }
+                    } else {
+                        SoundRow(monitor: monitor, effect: effect, onPinLimitReached: { showPinLimit = true })
+                    }
                 }
             }
         }
@@ -268,13 +290,9 @@ private struct AllSoundsView: View {
         .navigationTitle("All Sounds")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.brandGreen)
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.mp3],
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                monitor.importCustomSound(from: url)
+        .overlay {
+            if showImportPopup {
+                ImportSoundPopup(monitor: monitor, isPresented: $showImportPopup)
             }
         }
         .alert("Rename Sound", isPresented: Binding(
@@ -306,6 +324,131 @@ private struct AllSoundsView: View {
         guard case .custom(let id) = effect,
               let index = monitor.customSounds.firstIndex(where: { $0.id == id }) else { return }
         monitor.removeCustomSounds(at: IndexSet(integer: index))
+    }
+}
+
+/// Centered, alert-style popup: name the sound (top), choose the MP3, then add.
+private struct ImportSoundPopup: View {
+    let monitor: LockMonitor
+    @Binding var isPresented: Bool
+
+    @State private var showFileImporter = false
+    @State private var pickedURL: URL?
+    @State private var name = ""
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var canAdd: Bool { pickedURL != nil && !trimmedName.isEmpty }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .transition(.opacity)
+
+            VStack(spacing: 0) {
+                Text("Import Sound")
+                    .font(.title3.weight(.semibold))
+                    .padding(.top, 22)
+                    .padding(.bottom, 18)
+
+                // Grouped fields — file chooser on top, name below, hairline
+                // between, so the character count sits right under the name.
+                VStack(spacing: 0) {
+                    Button {
+                        showFileImporter = true
+                    } label: {
+                        HStack {
+                            Text(pickedURL?.lastPathComponent ?? "Choose MP3")
+                                .foregroundStyle(pickedURL == nil ? Color.secondary : Color.primary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Image(systemName: "square.and.arrow.down")
+                                .foregroundStyle(Color.brandGreen)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 15)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider()
+
+                    TextField("Name", text: $name)
+                        .font(.body)
+                        .submitLabel(.done)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 15)
+                        .onChange(of: name) { _, newValue in
+                            if newValue.count > LockMonitor.maxNameLength {
+                                name = String(newValue.prefix(LockMonitor.maxNameLength))
+                            }
+                        }
+                }
+                .background(Color(.systemBackground), in: .rect(cornerRadius: 12))
+                .padding(.horizontal, 18)
+
+                Text("\(name.count)/\(LockMonitor.maxNameLength) characters")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
+                    .padding(.bottom, 18)
+
+                // Native-style button bar.
+                Divider()
+                HStack(spacing: 0) {
+                    Button { close() } label: {
+                        Text("Cancel")
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Divider().frame(height: 52)
+                    Button {
+                        if let url = pickedURL {
+                            monitor.importCustomSound(from: url, name: trimmedName)
+                        }
+                        close()
+                    } label: {
+                        Text("Add")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(canAdd ? Color.brandGreen : Color.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canAdd)
+                }
+            }
+            .frame(width: 320)
+            .background(.regularMaterial, in: .rect(cornerRadius: 16))
+            .clipShape(.rect(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.25), radius: 24, y: 12)
+            .transition(.scale(scale: 0.92).combined(with: .opacity))
+        }
+        .tint(.brandGreen)
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.mp3],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            pickedURL = url
+            // Pre-fill the name from the file if the user hasn't typed one.
+            if trimmedName.isEmpty {
+                name = String(url.deletingPathExtension().lastPathComponent
+                    .prefix(LockMonitor.maxNameLength))
+            }
+        }
+    }
+
+    private func close() {
+        withAnimation(.easeInOut(duration: 0.2)) { isPresented = false }
     }
 }
 
