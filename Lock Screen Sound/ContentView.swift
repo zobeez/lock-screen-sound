@@ -223,15 +223,28 @@ private struct AllSoundsView: View {
     @State private var newName = ""
     @State private var showPinLimit = false
 
-    private var allSounds: [SoundEffect] {
-        let pinned = monitor.pinnedSounds
+    /// A row in the list, tagged with its pinned state. The identity folds in
+    /// `isPinned` so that pinning/unpinning changes the row's identity: `List`
+    /// then fades the row out at its old spot and fades a fresh one in at the
+    /// new spot, instead of gliding the same row across the whole list.
+    private struct SoundListItem: Identifiable {
+        let effect: SoundEffect
+        let isPinned: Bool
+        var id: String { "\(effect.id)#\(isPinned)" }
+    }
+
+    private var allSounds: [SoundListItem] {
+        let pinned = monitor.pinnedSounds.map { SoundListItem(effect: $0, isPinned: true) }
         // Custom sounds newest-first, above the built-ins, so a just-added
         // sound appears at the top of the list right after Add.
         let custom = monitor.customSounds
             .reversed()
             .map { SoundEffect.custom($0.id) }
             .filter { !monitor.isPinned($0) }
-        let defaults = SoundEffect.builtInCases.filter { !monitor.isPinned($0) }
+            .map { SoundListItem(effect: $0, isPinned: false) }
+        let defaults = SoundEffect.builtInCases
+            .filter { !monitor.isPinned($0) }
+            .map { SoundListItem(effect: $0, isPinned: false) }
         return pinned + custom + defaults
     }
 
@@ -249,7 +262,8 @@ private struct AllSoundsView: View {
             }
 
             Section {
-                ForEach(allSounds) { effect in
+                ForEach(allSounds) { item in
+                    let effect = item.effect
                     if case .custom = effect {
                         SoundRow(monitor: monitor, effect: effect, onPinLimitReached: { showPinLimit = true })
                             .swipeActions(edge: .trailing) {
@@ -506,10 +520,11 @@ private struct SoundRow: View {
                 if !isPinned && !monitor.canPinMore {
                     onPinLimitReached()
                 } else {
-                    // Move straight to/from the top with no fade animation.
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) { monitor.togglePin(effect) }
+                    // Animate the row sliding to/from the top so it moves in sync
+                    // with the swipe collapsing. Disabling the animation instead
+                    // made the reorder wait for the swipe to close and then jump,
+                    // which read as a lag.
+                    withAnimation(.snappy(duration: 0.3)) { monitor.togglePin(effect) }
                 }
             } label: {
                 Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin")
